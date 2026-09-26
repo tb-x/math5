@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7ec8ff">
+<title>Matma – gra dla dzieci</title>
+<meta name="description" content="Prosta gra w liczenie dla dzieci: 20 zadań na czas.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23ff9f43'/><text x='50' y='74' font-size='64' text-anchor='middle' font-family='sans-serif' font-weight='bold' fill='white'>+</text></svg>">
+<link rel="stylesheet" href="styles.css?v=8">
+</head>
+<body>
+
+<header class="topbar">
+  <button id="help-btn" class="round-btn" aria-label="Jak grać?" title="Jak grać?">?</button>
+  <h1>Matma</h1>
+  <div class="score" title="Wygrane gry"><span aria-hidden="true">🏆</span><span id="wins">0</span></div>
+</header>
+
+<main>
+  <!-- rakieta: jedna część za każde dobre zadanie -->
+  <div id="stage" class="stage">
+    <canvas aria-hidden="true"></canvas>
+    <div id="count" class="count" aria-live="polite"></div>
+  </div>
+
+  <div class="play">
+    <div class="timer" aria-hidden="true"><div id="timer-bar" class="timer-bar"></div></div>
+
+    <div id="task" class="task" aria-live="polite">
+      <span id="task-text" class="task-text">2 + 3</span>
+      <span class="task-eq">=</span>
+      <span id="answer" class="answer" aria-label="Twoja odpowiedź"><span class="caret"></span></span>
+    </div>
+
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+  </div>
+
+  <div id="keypad" class="keypad" aria-label="Klawiatura z cyframi">
+    <div class="krow">
+      <button class="key" data-key="7">7</button>
+      <button class="key" data-key="8">8</button>
+      <button class="key" data-key="9">9</button>
+    </div>
+    <div class="krow">
+      <button class="key" data-key="4">4</button>
+      <button class="key" data-key="5">5</button>
+      <button class="key" data-key="6">6</button>
+    </div>
+    <div class="krow">
+      <button class="key" data-key="1">1</button>
+      <button class="key" data-key="2">2</button>
+      <button class="key" data-key="3">3</button>
+    </div>
+    <div class="krow">
+      <button class="key key-minus" data-key="-" aria-label="minus">−</button>
+      <button class="key" data-key="0">0</button>
+      <button class="key key-del" data-key="Backspace" aria-label="Skasuj">⌫</button>
+    </div>
+    <div class="krow">
+      <button class="key key-ok" data-key="Enter">OK</button>
+    </div>
+  </div>
+</main>
+
+<!-- Panel startowy / końca gry -->
+<div id="endcard" class="overlay" hidden>
+  <div class="card">
+    <div id="end-emoji" class="end-emoji" aria-hidden="true">🎉</div>
+    <h2 id="end-title">Brawo!</h2>
+    <p id="end-text"></p>
+    <button id="again-btn" class="big-btn">Gramy!</button>
+  </div>
+</div>
+
+<!-- Panel pomocy -->
+<div id="helpcard" class="overlay" hidden>
+  <div class="card">
+    <h2>Jak grać?</h2>
+    <p class="help-note">Policz i wpisz wynik, potem naciśnij <b>OK</b>.</p>
+    <ul class="help-list">
+      <li><span class="mini mini-star">🚀</span> Jest 20 zadań. Za każde dobre dostajesz jedną część rakiety.</li>
+      <li><span class="mini mini-time">⏳</span> Pasek to czas. Gdy zniknie, rakieta startuje – taka, jaką zbudowałeś.</li>
+      <li><span class="mini mini-fire">🔥</span> Cała rakieta poleci w kosmos. Niedokończona się rozbije!</li>
+      <li><span class="mini mini-minus">−</span> Czasem wynik jest mniejszy od zera. Wtedy użyj minusa.</li>
+      <li><span class="mini mini-time">👆</span> Rakietę możesz obracać palcem – przesuń albo dotknij.</li>
+    </ul>
+    <p class="help-note">Pomyłka nie boli – spróbuj jeszcze raz, póki jest czas.</p>
+    <button id="vibe-btn" class="toggle-btn" aria-pressed="true" hidden></button>
+    <button id="help-close" class="big-btn">Rozumiem!</button>
+  </div>
+</div>
+
+<script src="haptics.js?v=8"></script>
+<script src="rocket.js?v=8"></script>
+<script src="game.js?v=8"></script>
+</body>
+</html>
