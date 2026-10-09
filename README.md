@@ -44,6 +44,7 @@ Pure static HTML/CSS/JS — no backend, no build step. Same shape as the
 - **A wrong answer does not end the game.** The box shakes, clears, and the child can try
   again while there is still time. At five, a slip of the finger shouldn't cost the whole run.
 - **Opening the help panel pauses the clock.**
+- **🏠 in the top-left corner** goes back to the list of all games.
 - **Losing shows the right answer** and how many parts the rocket had, with a friendly
   "Nie szkodzi!".
 

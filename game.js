@@ -299,6 +299,9 @@
   });
 
   document.addEventListener("keydown", function (e) {
+    // Enter na domku (Chrome zostawia go aktywnym po kliknięciu i powrocie)
+    // ma działać jak w grze, a nie nagle z niej wychodzić.
+    if (e.key === "Enter" && e.target.id === "home") e.preventDefault();
     if (!endcard.hidden || !helpcard.hidden) {
       if (e.key === "Enter" || e.key === " ") {
         if (!helpcard.hidden) closeHelp(); else newGame();
