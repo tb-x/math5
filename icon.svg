@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe6ff"/><stop offset=".6" stop-color="#eaf6ff"/><stop offset="1" stop-color="#fff7e6"/></linearGradient>
+  </defs>
+  <rect width="180" height="180" fill="url(#bg)"/>
+  <g fill="#fff"><circle cx="30" cy="36" r="5"/><circle cx="46" cy="70" r="3"/><circle cx="150" cy="104" r="4"/><circle cx="28" cy="120" r="3"/></g>
+  <!-- the rocket -->
+  <g stroke="#2c3a4b" stroke-width="4" stroke-linejoin="round">
+    <path d="M78 136 Q90 178 102 136 Z" fill="#ff9a1f"/>
+    <path d="M71 98 L46 128 L48 148 L72 134 Z" fill="#ff9f43"/>
+    <path d="M109 98 L134 128 L132 148 L108 134 Z" fill="#ff9f43"/>
+    <path d="M90 18 C120 44 118 100 112 136 L68 136 C62 100 60 44 90 18 Z" fill="#dfe3ea"/>
+    <path d="M90 18 C101 27 108 38 112 50 L68 50 C72 38 79 27 90 18 Z" fill="#ff4b4b"/>
+    <circle cx="90" cy="82" r="14" fill="#1cb0f6"/>
+  </g>
+  <path d="M84 138 Q90 160 96 138 Z" fill="#ffe45c"/>
+  <circle cx="85" cy="77" r="4" fill="#fff" opacity=".8"/>
+  <!-- the plus badge -->
+  <circle cx="140" cy="46" r="24" fill="#58cc02" stroke="#46a302" stroke-width="4"/>
+  <rect x="136" y="32" width="8" height="28" rx="3" fill="#fff"/><rect x="126" y="42" width="28" height="8" rx="3" fill="#fff"/>
+</svg>

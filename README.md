@@ -15,6 +15,8 @@ Pure static HTML/CSS/JS — no backend, no build step. Same shape as the
 | `game.js` | Game logic, including the task generator |
 | `rocket.js` | The 3D rocket: its 20 parts, the blast-off and the crash |
 | `haptics.js` | Phone vibration for game events |
+| `manifest.webmanifest`, `icon.svg`, `icon-*.png` | The Home Screen name and icon |
+| `sw.js` | Keeps a copy of the game so it works offline |
 | `.nojekyll` | Tells GitHub Pages to serve the files as-is |
 
 ## How the game works
@@ -92,6 +94,12 @@ and the choice is remembered.
 - Random praise ("Super!", "Brawo!", …) after each correct answer.
 - **Asset links carry a version** (`styles.css?v=6`). Bump it in `index.html` after changing a
   file, so browsers that visited before load the new version instead of a cached one.
+
+## Play offline (add to Home Screen)
+
+On iPhone or iPad, open the game in Safari, tap **Share → Add to Home Screen**, then open it once from the new icon while online. After that it starts full screen and works without internet. Changes arrive on their own: the next online launch downloads them and the one after shows them.
+
+(How: `manifest.webmanifest` gives the icon and full-screen mode; `sw.js`, a service worker, keeps a copy of every file the game uses, including the scripts for the rocket and the vibration. The icons `icon-180.png` and `icon-512.png` are rendered from `icon.svg` in headless Chrome.)
 
 ## Deploying to GitHub Pages
 
