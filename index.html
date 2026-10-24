@@ -109,6 +109,22 @@ if ('serviceWorker' in navigator) {
     const send = () => reg.active && reg.active.postMessage({ cache: [location.href, ...performance.getEntriesByType('resource').map((r) => r.name)] });
     send(); setTimeout(send, 5000); setTimeout(send, 20000);
   }).catch(() => {});
+  // Gdy sw.js da znać, że właśnie pobrał nowszą wersję tej strony, przeładuj ją raz: od razu, jeśli nikt jeszcze nie
+  // dotknął ekranu ani klawisza, a jeśli tak, to dopiero po powrocie do strony po 5+ minutach, żeby nie przerwać gry.
+  // Znacznik w sessionStorage nie pozwala przeładować drugi raz w ciągu 30 s.
+  let started = false, newer = false, hiddenAt = 0;
+  addEventListener('pointerdown', () => { started = true; }, true);
+  addEventListener('keydown', () => { started = true; }, true);
+  const reload = () => {
+    const key = 'tbx-sw-reload:' + location.pathname;
+    try { if (Date.now() - (+sessionStorage.getItem(key) || 0) < 30000) return; sessionStorage.setItem(key, Date.now()); } catch { return; }
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.updated) { newer = true; if (!started) reload(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) hiddenAt = Date.now();
+    else if (newer && hiddenAt && Date.now() - hiddenAt >= 5 * 60 * 1000) reload();
+  });
 }
 </script>
 </body>
