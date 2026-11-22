@@ -127,6 +127,7 @@ main{
   font-size:clamp(34px,11vw,64px); font-weight:bold; line-height:1; color:#0f5f9e;
   white-space:nowrap;
 }
+.task{cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent}   /* dotknięcie czyta zadanie */
 .task-text{letter-spacing:2px}
 .task-eq{color:var(--gray-d)}
 .answer{

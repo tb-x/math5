@@ -40,6 +40,221 @@
   var rafId = 0;
   var lastTask = "";       // żeby to samo zadanie nie wypadło dwa razy pod rząd
 
+  /* ---------- dźwięk ----------
+     Nagrania z assets/ (głos Jessica z ElevenLabs i efekty) grają w AudioContext, który rusza po dotknięciu
+     „Gramy!”. Gdy nagrania brak albo się jeszcze nie wczytało (file://, brak sieci), mówi głos przeglądarki
+     (speechSynthesis, pl-PL), a efekty są syntezowane. Zadanie czyta się z kawałków: „5” „plus” „7” „ile to jest?”. */
+  var ASSET_V = 1;           // podbij po podmianie pliku w assets/
+  var SFX_VOL = 0.5;         // efekty
+  var VOICE_VOL = 1;         // głos
+  var VOICE_GAP = 0.08;      // s przerwy między kawałkami zdania
+  var VOICE_WAIT = 400;      // ms czekania na nagranie, które się jeszcze ładuje, zanim powie je przeglądarka
+  var READ_TASKS = true;     // nowe zadanie czyta się na głos (dotknięcie zadania czyta je jeszcze raz)
+  var HURRY_GAP = 30;        // s: „Czas ucieka!” najwyżej raz na tyle (sam sygnał gra za każdym razem)
+  var ALMOST_PARTS = 15;     // od tylu części rozbita rakieta to „Prawie się udało!” zamiast „Ojej!…”
+  var CLIP_TRIM = { "sfx/right": 0.6, "sfx/wrong": 0.7, "sfx/blastoff": 0.8, "sfx/crash": 0.8 };   // głośność pojedynczych nagrań
+
+  var Sound = (function () {
+    var ac = null, out = null, plVoice = null;
+    var raw = {}, bufs = {}, pending = {};
+    var line = [], lineId = 0, lineEnd = 0;   // źródła bieżącego zdania, jego numer i kiedy się kończy
+
+    var CLIPS = ["sfx/clunk", "sfx/right", "sfx/wrong", "sfx/tick", "sfx/blastoff", "sfx/crash", "sfx/confetti", "sfx/hurry",
+      "voice/op-plus", "voice/op-minus", "voice/op-ile-to-jest",
+      "voice/praise-super", "voice/praise-brawo", "voice/praise-tak-jest", "voice/praise-swietnie", "voice/praise-ekstra",
+      "voice/praise-dobrze", "voice/retry-sprobuj-jeszcze-raz", "voice/retry-prawie", "voice/retry-dasz-rade",
+      "voice/retry-nie-szkodzi", "voice/rocket-crash", "voice/rocket-almost", "voice/rocket-win", "voice/rocket-hurry",
+      "voice/rocket-ready", "voice/count-3", "voice/count-2", "voice/count-1", "voice/count-start"];
+    for (var n = 0; n <= 30; n++) CLIPS.push("voice/num-" + n);
+
+    function fetchClip(name) {
+      if (!raw[name]) {
+        raw[name] = fetch("assets/" + name + ".mp3?v=" + ASSET_V)
+          .then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+          .catch(function () { return null; });
+      }
+      return raw[name];
+    }
+    // pobiera i dekoduje raz; daje bufor albo null
+    function load(name) {
+      if (bufs[name]) return Promise.resolve(bufs[name]);
+      fetchClip(name);
+      if (!ac) return Promise.resolve(null);
+      if (!pending[name]) {
+        pending[name] = raw[name].then(function (b) {
+          return b && new Promise(function (res, rej) { ac.decodeAudioData(b, res, rej); });
+        }).then(function (buf) { return buf || null; }, function () { return null; }).then(function (buf) {
+          if (buf) bufs[name] = buf;
+          else { delete raw[name]; delete pending[name]; }   // nie wyszło: następnym razem spróbuje jeszcze raz
+          return buf;
+        });
+      }
+      return pending[name];
+    }
+
+    function unlock() {
+      if (ac) { if (ac.state === "suspended") ac.resume(); return; }
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { ac = new AC(); } catch (e) { ac = null; return; }
+      out = ac.createGain();
+      out.gain.value = 1;
+      out.connect(ac.destination);
+      Object.keys(raw).forEach(load);
+    }
+
+    function play(name, vol, at) {
+      var buf = bufs[name];
+      if (!ac || !buf) return null;
+      var s = ac.createBufferSource(), g = ac.createGain();
+      s.buffer = buf;
+      g.gain.value = vol * (CLIP_TRIM[name] || 1);
+      s.connect(g).connect(out);
+      s.start(at || 0);
+      return s;
+    }
+    function tone(f0, f1, dur, type, vol, delay) {
+      if (!ac) return;
+      var t = ac.currentTime + (delay || 0);
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || "sine";
+      o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+    function noise(dur, vol, delay) {
+      if (!ac) return;
+      var t = ac.currentTime + (delay || 0), len = Math.ceil(ac.sampleRate * dur);
+      var b = ac.createBuffer(1, len, ac.sampleRate), d = b.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      var s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = b; f.type = "lowpass"; f.frequency.value = 900; g.gain.value = vol;
+      s.connect(f).connect(g).connect(out);
+      s.start(t);
+    }
+    // efekt: nagranie, a gdy go brak — syntezowany zamiennik; daje true, gdy zagrało nagranie
+    function fx(name, synth) {
+      if (play(name, SFX_VOL)) return true;
+      if (synth) synth();
+      return false;
+    }
+
+    function stopLine() {
+      lineId++;
+      line.forEach(function (s) { try { s.stop(); } catch (e) {} });
+      line = [];
+      lineEnd = 0;
+      try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+    }
+    function tts(text) {
+      var ss = window.speechSynthesis;
+      if (!ss || !text) return;
+      try {
+        if (!plVoice) plVoice = ss.getVoices().filter(function (v) { return /^pl/i.test(v.lang); })[0] || null;
+        var u = new SpeechSynthesisUtterance(text);
+        u.lang = "pl-PL";
+        u.rate = 0.9;
+        if (plVoice) u.voice = plVoice;
+        ss.speak(u);
+      } catch (e) {}
+    }
+    // Zdanie z kilku nagrań, jedno po drugim: [[nazwa, tekst], …]. Brakuje któregoś — całe mówi przeglądarka.
+    // after: zaczyna się dopiero, gdy skończy się poprzednie (pochwała, potem nowe zadanie); inaczej je przerywa.
+    function say(parts, after) {
+      if (!ac) return;
+      if (!after) stopLine();
+      var id = lineId, timedOut = false;
+      var timer = setTimeout(function () { timedOut = true; go(); }, VOICE_WAIT);
+      Promise.all(parts.map(function (p) { return load(p[0]); })).then(function () {
+        clearTimeout(timer);
+        if (!timedOut) go();
+      });
+      function go() {
+        if (id !== lineId) return;          // w międzyczasie ktoś przerwał mowę
+        var start = Math.max(ac.currentTime + 0.03, after ? lineEnd : 0);
+        var ready = parts.every(function (p) { return bufs[p[0]]; });
+        if (!ready) {
+          var text = parts.map(function (p) { return p[1]; }).join(" ");
+          setTimeout(function () { if (id === lineId) tts(text); }, (start - ac.currentTime) * 1000);
+          return;
+        }
+        var t = start;
+        parts.forEach(function (p) {
+          var s = play(p[0], VOICE_VOL, t);
+          if (s) line.push(s);
+          t += bufs[p[0]].duration + VOICE_GAP;
+        });
+        lineEnd = t;
+      }
+    }
+
+    try { if (window.speechSynthesis) speechSynthesis.getVoices(); } catch (e) {}   // lista głosów ładuje się leniwie
+    CLIPS.forEach(fetchClip);
+
+    return {
+      unlock: unlock,
+      say: say,
+      stop: stopLine,
+      clunk: function () { fx("sfx/clunk", function () { tone(220, 160, 0.12, "triangle", 0.2); tone(1800, 2200, 0.08, "sine", 0.05, 0.05); }); },
+      right: function () { fx("sfx/right", function () { tone(784, 784, 0.14, "triangle", 0.16); tone(1047, 1047, 0.22, "triangle", 0.16, 0.1); }); },
+      wrong: function () { fx("sfx/wrong", function () { tone(260, 180, 0.3, "sine", 0.2); }); },
+      tick: function () { fx("sfx/tick", function () { tone(1200, 1200, 0.04, "square", 0.06); }); },
+      hurry: function () { fx("sfx/hurry", function () { tone(880, 880, 0.08, "sine", 0.12); tone(880, 880, 0.08, "sine", 0.12, 0.14); }); },
+      confetti: function () {
+        fx("sfx/confetti", function () {
+          noise(0.12, 0.3);
+          for (var i = 0; i < 5; i++) tone(1800 + i * 200, 2400 + i * 200, 0.08, "sine", 0.05, 0.1 + i * 0.06);
+        });
+      },
+      blastoff: function () { fx("sfx/blastoff", function () { noise(2.5, 0.5); tone(90, 40, 2.5, "sawtooth", 0.08); }); },
+      // nagranie rozbicia trwa od krztuszenia się silnika aż po wybuch, więc wybuch gra osobno tylko bez niego
+      crash: function () {
+        return fx("sfx/crash", function () { tone(180, 90, 0.5, "sawtooth", 0.08); tone(160, 80, 0.5, "sawtooth", 0.08, 0.6); });
+      },
+      boom: function () { noise(1.2, 0.6); tone(110, 30, 1, "sine", 0.5); }
+    };
+  })();
+
+  // zadanie na głos: „5” „plus” „7” „ile to jest?” (liczby 0–30 są nagrane)
+  function taskVoice(text) {
+    var m = /^(\d+) ([+-]) (\d+)$/.exec(text);
+    if (!m) return [["voice/none", text + ", ile to jest?"]];
+    return [
+      ["voice/num-" + m[1], m[1]],
+      m[2] === "+" ? ["voice/op-plus", "plus"] : ["voice/op-minus", "minus"],
+      ["voice/num-" + m[3], m[3]],
+      ["voice/op-ile-to-jest", "ile to jest?"]
+    ];
+  }
+  var crashClip = false;   // czy rozbicie gra z nagrania (wtedy wybuch już w nim jest)
+  var hurryAt = -1e9;      // kiedy ostatnio padło „Czas ucieka!”
+
+  // zdarzenia rakiety (rocket.js): wibracje i dźwięk
+  function rocketEvent(ev) {
+    Haptics.buzz(ev);
+    if (ev === "land") Sound.clunk();
+    else if (ev === "tick") {             // rocket.js odlicza 3, 2, 1, ale zdarzenie nie mówi, która to liczba
+      Sound.tick();
+      var n = countdown--;
+      if (n >= 1 && n <= 3) Sound.say([["voice/count-" + n, ["", "jeden!", "dwa!", "trzy!"][n]]]);
+    } else if (ev === "ignite") {
+      Sound.blastoff();
+      Sound.say([["voice/count-start", "start!"]]);
+    } else if (ev === "sputter") crashClip = Sound.crash();
+    else if (ev === "boom") {
+      if (!crashClip) Sound.boom();
+      Sound.say(index >= ALMOST_PARTS
+        ? [["voice/rocket-almost", "Prawie się udało!"]]
+        : [["voice/rocket-crash", "Ojej! Rakieta się przewróciła."]]);
+    }
+  }
+  var countdown = 3;       // która liczba odliczania jest następna (win() ustawia 3)
+
   /* ---------- mała pamięć w przeglądarce ---------- */
   function load(key, fallback) {
     try {
@@ -109,7 +324,14 @@
     var frac = Math.max(0, left / timeLimit);
     timerBar.style.transform = "scaleX(" + frac + ")";
     if (frac < 0.25) {
-      if (!timerBar.classList.contains("low")) Haptics.buzz("hurry");
+      if (!timerBar.classList.contains("low")) {
+        Haptics.buzz("hurry");
+        Sound.hurry();
+        if (Date.now() - hurryAt > HURRY_GAP * 1000) {
+          hurryAt = Date.now();
+          Sound.say([["voice/rocket-hurry", "Czas ucieka!"]], true);
+        }
+      }
       timerBar.classList.add("low");
     } else if (frac < 0.5) {
       timerBar.classList.add("mid");
@@ -124,9 +346,11 @@
   /* ---------- przebieg gry ---------- */
   function newGame() {
     index = 0;
+    hurryAt = -1e9;
     Rocket.reset();
     endcard.hidden = true;
     say("");
+    Sound.say([["voice/rocket-ready", "Gotowi?"]]);
     nextTask();
   }
 
@@ -142,6 +366,7 @@
     render();
     locked = false;
     startTimer(lvl.time);
+    if (READ_TASKS) Sound.say(taskVoice(t.text), true);   // po pochwale albo „Gotowi?”
   }
 
   function render() {
@@ -194,6 +419,7 @@
   }
 
   var PRAISE = ["Super!", "Brawo!", "Tak jest!", "Świetnie!", "Ekstra!", "Dobrze!"];
+  var PRAISE_CLIP = ["super", "brawo", "tak-jest", "swietnie", "ekstra", "dobrze"];
 
   function correct() {
     locked = true;
@@ -201,7 +427,10 @@
     taskEl.className = "task ok";
     Haptics.buzz("ok");
     Rocket.add(index);                // nowa część rakiety
-    say(PRAISE[rnd(0, PRAISE.length - 1)]);
+    var k = rnd(0, PRAISE.length - 1);
+    say(PRAISE[k]);
+    Sound.right();
+    Sound.say([["voice/praise-" + PRAISE_CLIP[k], PRAISE[k]]]);
     index++;
     setTimeout(function () {
       say("");
@@ -213,7 +442,12 @@
     // pomyłka nie kończy gry — czas dalej leci, można poprawić
     shake();
     Haptics.buzz("bad");
-    say("Spróbuj jeszcze raz");
+    Sound.wrong();
+    // zwykle „Spróbuj jeszcze raz”, czasem „Dasz radę!”, a o jeden obok — „Prawie!”
+    var off = Math.abs(parseInt(typed, 10) - answer);
+    var r = off === 1 ? ["Prawie!", "prawie"] : Math.random() < 0.3 ? ["Dasz radę!", "dasz-rade"] : ["Spróbuj jeszcze raz", "sprobuj-jeszcze-raz"];
+    say(r[0]);
+    Sound.say([["voice/retry-" + r[1], r[0]]]);
     typed = "";
     setTimeout(render, 250);
   }
@@ -229,7 +463,9 @@
       ? "Rakieta miała tylko " + n + " z " + TOTAL + " części i się rozbiła. Dobry wynik to:"
       : "Zabrakło czasu. Dobry wynik to:";
     var solution = taskText.textContent + " = " + fmt(answer);
+    crashClip = false;
     Rocket.crash(function () {
+      Sound.say([["voice/retry-nie-szkodzi", "Nie szkodzi!"]], true);   // po „Ojej! Rakieta się przewróciła.”
       showEnd("🔥", "Nie szkodzi!", text, 0, solution);
     });
   }
@@ -239,8 +475,11 @@
     var wins = load("matma.wins", 0) + 1;
     save("matma.wins", wins);
     winsEl.textContent = wins;
+    countdown = 3;
     Rocket.blastOff(function () {
       confetti();
+      Sound.confetti();
+      Sound.say([["voice/rocket-win", "Brawo! Rakieta poleciała w kosmos!"]], true);
       Haptics.buzz("win");
       showEnd("🚀", "Brawo!", "Rakieta ma wszystkie 20 części i poleciała w kosmos!", 0);
     });
@@ -316,6 +555,16 @@
 
   document.getElementById("again-btn").addEventListener("click", newGame);
 
+  // dźwięk rusza dopiero po pierwszym dotknięciu albo klawiszu (tak chcą przeglądarki)
+  ["pointerdown", "touchend", "keydown"].forEach(function (ev) {
+    document.addEventListener(ev, Sound.unlock, true);
+  });
+
+  // dotknięcie zadania czyta je jeszcze raz
+  taskEl.addEventListener("click", function () {
+    if (!locked) Sound.say(taskVoice(taskText.textContent));
+  });
+
   // Pomoc w trakcie gry zatrzymuje zegar — dziecko nie traci czasu na czytanie.
   var paused = 0;
   function openHelp() {
@@ -338,7 +587,7 @@
 
   /* ---------- start ---------- */
   winsEl.textContent = load("matma.wins", 0);
-  Rocket.init(document.getElementById("stage"), document.getElementById("count"), Haptics.buzz);
+  Rocket.init(document.getElementById("stage"), document.getElementById("count"), rocketEvent);
 
   // przełącznik wibracji w pomocy — tylko tam, gdzie telefon umie wibrować
   var vibeBtn = document.getElementById("vibe-btn");
